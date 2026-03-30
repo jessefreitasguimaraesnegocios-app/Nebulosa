@@ -1,0 +1,7 @@
+{
+  "name": "Nebulosa: Mapa do Céu Interativo",
+  "description": "Uma aplicação abrangente de observação de estrelas com visualização de constelações em tempo real, identificação de estrelas e uma bússola virtual para orientação celestial.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
