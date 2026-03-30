@@ -31,6 +31,17 @@ export const BRIGHT_STARS: Star[] = [
   { id: 'polaris', ra: 2.53, dec: 89.26, mag: 1.97, name: 'Polaris', dist: 430, constellation: 'Ursa Menor' },
 ];
 
+import { EXTRA_STARS } from './extraStars';
+
+const byId = new Map<string, Star>();
+for (const s of BRIGHT_STARS) byId.set(s.id, s);
+for (const s of EXTRA_STARS) {
+  if (!byId.has(s.id)) byId.set(s.id, s);
+}
+
+/** Catálogo combinado para o mapa, ordenado por magnitude (mais brilhantes primeiro). */
+export const SKY_STARS: Star[] = [...byId.values()].sort((a, b) => a.mag - b.mag);
+
 export interface ConstellationLine {
   from: string;
   to: string;

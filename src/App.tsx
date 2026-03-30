@@ -1,16 +1,20 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { SkyMap } from './components/SkyMap';
-import { Star } from './constants/stars';
 import { Coordinates } from './lib/astronomy';
+import { Body } from 'astronomy-engine';
+import type { SkySelection } from './types/sky';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Star as StarIcon, Navigation, Info, Compass } from 'lucide-react';
 
 export default function App() {
   const [location, setLocation] = useState<Coordinates>({ lat: 40.7128, lon: -74.006 }); // Default NYC
   const [orientation, setOrientation] = useState<{ alpha: number; beta: number; gamma: number } | null>(null);
-  const [selectedStar, setSelectedStar] = useState<Star | null>(null);
-  const [isLocating, setIsLocating] = useState(true);
+  const [selection, setSelection] = useState<SkySelection | null>(null);
   const lastOrientationMs = useRef(0);
+
+  const handleSkySelect = useCallback((sel: SkySelection) => {
+    setSelection(sel);
+  }, []);
 
   useEffect(() => {
     // Get geolocation
@@ -18,15 +22,11 @@ export default function App() {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           setLocation({ lat: pos.coords.latitude, lon: pos.coords.longitude });
-          setIsLocating(false);
         },
         (err) => {
           console.error('Geolocation error:', err);
-          setIsLocating(false);
         }
       );
-    } else {
-      setIsLocating(false);
     }
 
     // Get device orientation
@@ -96,11 +96,7 @@ export default function App() {
         <div className="w-full flex flex-col lg:flex-row gap-12 items-start justify-center">
           {/* Left Side: Sky Map */}
           <section className="flex-1 w-full flex justify-center">
-            <SkyMap 
-              location={location} 
-              orientation={orientation} 
-              onStarClick={setSelectedStar} 
-            />
+            <SkyMap location={location} orientation={orientation} onSelect={handleSkySelect} />
           </section>
 
           {/* Right Side: Info & Details */}
@@ -132,44 +128,47 @@ export default function App() {
             </div>
 
             <AnimatePresence mode="wait">
-              {selectedStar ? (
+              {selection?.kind === 'star' ? (
                 <motion.div
-                  key={selectedStar.id}
+                  key={`star-${selection.star.id}`}
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -20 }}
                   className="bg-zinc-900/40 backdrop-blur-xl border border-orange-500/20 rounded-3xl p-6 relative overflow-hidden"
                 >
                   <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/5 blur-3xl rounded-full -mr-16 -mt-16" />
-                  
-                  <button 
-                    onClick={() => setSelectedStar(null)}
+
+                  <button
+                    type="button"
+                    onClick={() => setSelection(null)}
                     className="absolute top-4 right-4 p-1 hover:bg-white/10 rounded-full transition-colors"
                   >
                     <X size={16} className="text-zinc-500" />
                   </button>
 
-                  <h3 className="text-2xl font-bold text-white mb-1">{selectedStar.name}</h3>
+                  <h3 className="text-2xl font-bold text-white mb-1">{selection.star.name}</h3>
                   <p className="text-orange-500 text-xs font-medium uppercase tracking-wider mb-6">
-                    {selectedStar.constellation}
+                    {selection.star.constellation ?? 'Estrela'}
                   </p>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <span className="text-[10px] uppercase text-zinc-500 font-semibold">Magnitude</span>
-                      <p className="text-sm text-zinc-200">{selectedStar.mag}</p>
+                      <p className="text-sm text-zinc-200">{selection.star.mag}</p>
                     </div>
                     <div className="space-y-1">
                       <span className="text-[10px] uppercase text-zinc-500 font-semibold">Distância</span>
-                      <p className="text-sm text-zinc-200">{selectedStar.dist} ly</p>
+                      <p className="text-sm text-zinc-200">
+                        {selection.star.dist != null ? `${selection.star.dist} al` : '—'}
+                      </p>
                     </div>
                     <div className="space-y-1">
                       <span className="text-[10px] uppercase text-zinc-500 font-semibold">AR</span>
-                      <p className="text-sm text-zinc-200 font-mono">{selectedStar.ra}h</p>
+                      <p className="text-sm text-zinc-200 font-mono">{selection.star.ra}h</p>
                     </div>
                     <div className="space-y-1">
                       <span className="text-[10px] uppercase text-zinc-500 font-semibold">Decl.</span>
-                      <p className="text-sm text-zinc-200 font-mono">{selectedStar.dec}°</p>
+                      <p className="text-sm text-zinc-200 font-mono">{selection.star.dec}°</p>
                     </div>
                   </div>
 
@@ -177,8 +176,74 @@ export default function App() {
                     <div className="flex items-start gap-3">
                       <Info size={16} className="text-zinc-500 mt-0.5" />
                       <p className="text-xs text-zinc-400 leading-relaxed">
-                        {selectedStar.name} é uma das estrelas mais proeminentes na constelação de {selectedStar.constellation}. 
-                        É visível a olho nu na maioria dos locais da Terra.
+                        {selection.star.name} na constelação de {selection.star.constellation ?? '—'}. Coordenadas
+                        aproximadas J2000; visibilidade depende do horário e da latitude.
+                      </p>
+                    </div>
+                  </div>
+                </motion.div>
+              ) : selection?.kind === 'solar' ? (
+                <motion.div
+                  key={`solar-${selection.solar.id}`}
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  className="bg-zinc-900/40 backdrop-blur-xl border border-cyan-500/25 rounded-3xl p-6 relative overflow-hidden"
+                >
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/5 blur-3xl rounded-full -mr-16 -mt-16" />
+
+                  <button
+                    type="button"
+                    onClick={() => setSelection(null)}
+                    className="absolute top-4 right-4 p-1 hover:bg-white/10 rounded-full transition-colors"
+                  >
+                    <X size={16} className="text-zinc-500" />
+                  </button>
+
+                  <h3 className="text-2xl font-bold text-white mb-1">{selection.solar.name}</h3>
+                  <p className="text-cyan-400 text-xs font-medium uppercase tracking-wider mb-6">
+                    Sistema solar
+                  </p>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <span className="text-[10px] uppercase text-zinc-500 font-semibold">Magnitude</span>
+                      <p className="text-sm text-zinc-200">{selection.solar.mag.toFixed(2)}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-[10px] uppercase text-zinc-500 font-semibold">Distância</span>
+                      <p className="text-sm text-zinc-200">{selection.solar.geoDistAu.toFixed(3)} UA</p>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-[10px] uppercase text-zinc-500 font-semibold">Altura</span>
+                      <p className="text-sm text-zinc-200 font-mono">{selection.solar.alt.toFixed(1)}°</p>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-[10px] uppercase text-zinc-500 font-semibold">Azimute</span>
+                      <p className="text-sm text-zinc-200 font-mono">{selection.solar.az.toFixed(1)}°</p>
+                    </div>
+                    {selection.solar.body === Body.Moon && selection.solar.phaseFraction != null ? (
+                      <div className="space-y-1 col-span-2">
+                        <span className="text-[10px] uppercase text-zinc-500 font-semibold">Fase</span>
+                        <p className="text-sm text-zinc-200">
+                          {(selection.solar.phaseFraction * 100).toFixed(0)}% iluminada (0 = nova, 100 = cheia)
+                        </p>
+                      </div>
+                    ) : null}
+                    {selection.solar.ringTilt != null ? (
+                      <div className="space-y-1 col-span-2">
+                        <span className="text-[10px] uppercase text-zinc-500 font-semibold">Anéis (Saturno)</span>
+                        <p className="text-sm text-zinc-200">{selection.solar.ringTilt.toFixed(1)}°</p>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-8 pt-6 border-t border-white/5">
+                    <div className="flex items-start gap-3">
+                      <Info size={16} className="text-zinc-500 mt-0.5" />
+                      <p className="text-xs text-zinc-400 leading-relaxed">
+                        Posição calculada com Astronomy Engine (efemérides) para o seu local e horário do mapa.
+                        Atualização do céu a cada minuto.
                       </p>
                     </div>
                   </div>
@@ -191,7 +256,7 @@ export default function App() {
                 >
                   <Navigation size={32} className="text-zinc-700 mb-4 animate-pulse" />
                   <p className="text-sm text-zinc-500">
-                    Selecione uma estrela no mapa para ver dados astronômicos detalhados.
+                    Toque em uma estrela, planeta ou na Lua para ver detalhes astronômicos.
                   </p>
                 </motion.div>
               )}
@@ -203,7 +268,7 @@ export default function App() {
       {/* Footer */}
       <footer className="relative z-10 mt-auto py-8 text-center border-t border-white/5">
         <p className="text-[10px] text-zinc-600 uppercase tracking-[0.2em]">
-          Dados originados do Catálogo de Estrelas Brilhantes de Yale • Cálculos em tempo real
+          Estrelas: Yale BSC + extensão • Lua e planetas: Astronomy Engine
         </p>
       </footer>
     </div>
