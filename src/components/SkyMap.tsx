@@ -14,20 +14,29 @@ interface SkyMapProps {
 export const SkyMap: React.FC<SkyMapProps> = ({ location, orientation, onStarClick }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const [stars, setStars] = useState<(Star & { alt: number; az: number })[]>([]);
-  const [time, setTime] = useState(new Date());
+  /** Used only for the clock label — does not trigger map redraw */
+  const [clockNow, setClockNow] = useState(() => new Date());
+  /** Star positions change slowly; updating this every second was redrawing the whole SVG */
+  const [astroTime, setAstroTime] = useState(() => new Date());
 
   useEffect(() => {
-    const timer = setInterval(() => setTime(new Date()), 1000);
-    return () => clearInterval(timer);
+    const tick = setInterval(() => setClockNow(new Date()), 1000);
+    return () => clearInterval(tick);
+  }, []);
+
+  useEffect(() => {
+    setAstroTime(new Date());
+    const tick = setInterval(() => setAstroTime(new Date()), 60_000);
+    return () => clearInterval(tick);
   }, []);
 
   useEffect(() => {
     const updatedStars = BRIGHT_STARS.map((star) => {
-      const coords = getHorizontalCoords(star, location, time);
+      const coords = getHorizontalCoords(star, location, astroTime);
       return { ...star, ...coords };
     });
     setStars(updatedStars);
-  }, [location, time]);
+  }, [location, astroTime]);
 
   useEffect(() => {
     if (!svgRef.current) return;
@@ -148,7 +157,7 @@ export const SkyMap: React.FC<SkyMapProps> = ({ location, orientation, onStarCli
         </div>
         <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 text-xs text-zinc-400">
           <Clock size={14} className="text-blue-500" />
-          <span>{time.toLocaleTimeString()}</span>
+          <span>{clockNow.toLocaleTimeString()}</span>
         </div>
       </div>
 

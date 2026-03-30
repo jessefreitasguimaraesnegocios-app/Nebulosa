@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { SkyMap } from './components/SkyMap';
 import { Star } from './constants/stars';
 import { Coordinates } from './lib/astronomy';
@@ -10,6 +10,7 @@ export default function App() {
   const [orientation, setOrientation] = useState<{ alpha: number; beta: number; gamma: number } | null>(null);
   const [selectedStar, setSelectedStar] = useState<Star | null>(null);
   const [isLocating, setIsLocating] = useState(true);
+  const lastOrientationMs = useRef(0);
 
   useEffect(() => {
     // Get geolocation
@@ -30,9 +31,11 @@ export default function App() {
 
     // Get device orientation
     const handleOrientation = (e: DeviceOrientationEvent) => {
-      if (e.alpha !== null && e.beta !== null && e.gamma !== null) {
-        setOrientation({ alpha: e.alpha, beta: e.beta, gamma: e.gamma });
-      }
+      if (e.alpha === null || e.beta === null || e.gamma === null) return;
+      const now = Date.now();
+      if (now - lastOrientationMs.current < 200) return;
+      lastOrientationMs.current = now;
+      setOrientation({ alpha: e.alpha, beta: e.beta, gamma: e.gamma });
     };
 
     window.addEventListener('deviceorientation', handleOrientation);
