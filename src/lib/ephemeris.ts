@@ -4,6 +4,7 @@ import {
   Horizon,
   Illumination,
   Observer,
+  SearchRiseSet,
 } from 'astronomy-engine';
 import type { Coordinates } from './astronomy';
 
@@ -60,4 +61,24 @@ export function computeSolarPositions(
   }
 
   return out;
+}
+
+export interface RiseSetTimes {
+  rise: Date | null;
+  set: Date | null;
+}
+
+/** Próximo nascer e próximo pôr (aprox.) a partir de `from`. */
+export function computeRiseSetTimes(
+  body: Body,
+  location: Coordinates,
+  from: Date
+): RiseSetTimes {
+  const observer = makeObserver(location);
+  const riseEv = SearchRiseSet(body, observer, +1, from, 2);
+  const setEv = SearchRiseSet(body, observer, -1, from, 2);
+  return {
+    rise: riseEv ? riseEv.date : null,
+    set: setEv ? setEv.date : null,
+  };
 }

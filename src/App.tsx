@@ -1,19 +1,46 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { SkyMap } from './components/SkyMap';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { SkyMap, type StarNameMode } from './components/SkyMap';
 import { Coordinates } from './lib/astronomy';
 import { Body } from 'astronomy-engine';
 import type { SkySelection } from './types/sky';
+import { computeRiseSetTimes } from './lib/ephemeris';
+import { buildSearchIndex } from './lib/skySearch';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Star as StarIcon, Navigation, Info, Compass } from 'lucide-react';
+import { X, Star as StarIcon, Navigation, Info, Compass, Search } from 'lucide-react';
+
+function toDatetimeLocalValue(d: Date): string {
+  const p = (n: number) => n.toString().padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
 
 export default function App() {
   const [location, setLocation] = useState<Coordinates>({ lat: 40.7128, lon: -74.006 }); // Default NYC
   const [orientation, setOrientation] = useState<{ alpha: number; beta: number; gamma: number } | null>(null);
   const [selection, setSelection] = useState<SkySelection | null>(null);
+  const [mapTime, setMapTime] = useState(() => new Date());
+  const [showConstellations, setShowConstellations] = useState(true);
+  const [showGrid, setShowGrid] = useState(true);
+  const [starNameMode, setStarNameMode] = useState<StarNameMode>('bright');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [focusTargetId, setFocusTargetId] = useState<string | null>(null);
   const lastOrientationMs = useRef(0);
+
+  const searchIndex = useMemo(() => buildSearchIndex(), []);
+  const searchHits = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (q.length < 1) return [];
+    return searchIndex.filter((e) => e.label.toLowerCase().includes(q)).slice(0, 14);
+  }, [searchQuery, searchIndex]);
+
+  const riseSetSolar = useMemo(() => {
+    if (selection?.kind !== 'solar') return null;
+    return computeRiseSetTimes(selection.solar.body, location, mapTime);
+  }, [selection, location, mapTime]);
 
   const handleSkySelect = useCallback((sel: SkySelection) => {
     setSelection(sel);
+    if (sel.kind === 'star') setFocusTargetId(sel.star.id);
+    else setFocusTargetId(sel.solar.id);
   }, []);
 
   useEffect(() => {
@@ -88,15 +115,121 @@ export default function App() {
               Nebulosa
             </h1>
           </motion.div>
-          <p className="text-zinc-400 max-w-md mx-auto text-sm leading-relaxed">
-            Explore o céu noturno em tempo real. Alinhe seu dispositivo com as estrelas para identificar constelações e corpos celestes.
+          <p className="text-zinc-400 max-w-lg mx-auto text-sm leading-relaxed">
+            Mapa alt-az com constelações, asterismos (Três Marias, Cruzeiro do Sul), Lua e planetas. Ajuste data/hora,
+            busque um alvo e use pinça ou botões para zoom; arraste para mover o disco.
           </p>
         </header>
+
+        <div className="w-full max-w-3xl mb-8 space-y-4">
+          <div className="bg-zinc-900/50 backdrop-blur-md border border-white/10 rounded-2xl p-4 grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">
+                Data e hora do mapa
+              </label>
+              <div className="flex flex-wrap gap-2 items-center">
+                <input
+                  type="datetime-local"
+                  value={toDatetimeLocalValue(mapTime)}
+                  onChange={(e) => setMapTime(new Date(e.target.value))}
+                  className="flex-1 min-w-[180px] bg-black/40 border border-zinc-700 rounded-lg px-2 py-1.5 text-sm text-zinc-200"
+                />
+                <button
+                  type="button"
+                  onClick={() => setMapTime(new Date())}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-violet-600/80 hover:bg-violet-600 text-white font-medium"
+                >
+                  Agora
+                </button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold flex items-center gap-1">
+                <Search size={12} /> Buscar no céu
+              </label>
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Ex.: Júpiter, Órion, Três Marias…"
+                className="w-full bg-black/40 border border-zinc-700 rounded-lg px-2 py-1.5 text-sm text-zinc-200 placeholder:text-zinc-600"
+                list="sky-search-datalist"
+              />
+              <datalist id="sky-search-datalist">
+                {searchIndex.slice(0, 80).map((e) => (
+                  <option key={e.id} value={e.label} />
+                ))}
+              </datalist>
+              {searchHits.length > 0 ? (
+                <ul className="max-h-36 overflow-auto rounded-lg border border-zinc-800 bg-black/50 text-xs">
+                  {searchHits.map((e) => (
+                    <li key={`${e.kind}-${e.id}`}>
+                      <button
+                        type="button"
+                        className="w-full text-left px-2 py-1.5 hover:bg-white/10 text-zinc-300"
+                        onClick={() => {
+                          setFocusTargetId(e.id);
+                          setSearchQuery('');
+                        }}
+                      >
+                        {e.label}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-3 items-center justify-center text-xs text-zinc-400">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showConstellations}
+                onChange={(e) => setShowConstellations(e.target.checked)}
+                className="rounded border-zinc-600"
+              />
+              Constelações e asterismos
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showGrid}
+                onChange={(e) => setShowGrid(e.target.checked)}
+                className="rounded border-zinc-600"
+              />
+              Grade alt/az
+            </label>
+            <span className="text-zinc-600">|</span>
+            <span className="text-zinc-500">Nomes:</span>
+            {(['off', 'bright', 'all'] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setStarNameMode(m)}
+                className={`px-2 py-0.5 rounded-md capitalize ${
+                  starNameMode === m ? 'bg-violet-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                }`}
+              >
+                {m === 'off' ? 'off' : m === 'bright' ? 'brilhantes' : 'todas'}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <div className="w-full flex flex-col lg:flex-row gap-12 items-start justify-center">
           {/* Left Side: Sky Map */}
           <section className="flex-1 w-full flex justify-center">
-            <SkyMap location={location} orientation={orientation} onSelect={handleSkySelect} />
+            <SkyMap
+              location={location}
+              orientation={orientation}
+              onSelect={handleSkySelect}
+              mapTime={mapTime}
+              showConstellations={showConstellations}
+              showGrid={showGrid}
+              starNameMode={starNameMode}
+              focusTargetId={focusTargetId}
+            />
           </section>
 
           {/* Right Side: Info & Details */}
@@ -236,14 +369,33 @@ export default function App() {
                         <p className="text-sm text-zinc-200">{selection.solar.ringTilt.toFixed(1)}°</p>
                       </div>
                     ) : null}
+                    {riseSetSolar ? (
+                      <>
+                        <div className="space-y-1">
+                          <span className="text-[10px] uppercase text-zinc-500 font-semibold">Próximo nascer</span>
+                          <p className="text-sm text-zinc-200">
+                            {riseSetSolar.rise
+                              ? riseSetSolar.rise.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+                              : '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <span className="text-[10px] uppercase text-zinc-500 font-semibold">Próximo pôr</span>
+                          <p className="text-sm text-zinc-200">
+                            {riseSetSolar.set
+                              ? riseSetSolar.set.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+                              : '—'}
+                          </p>
+                        </div>
+                      </>
+                    ) : null}
                   </div>
 
                   <div className="mt-8 pt-6 border-t border-white/5">
                     <div className="flex items-start gap-3">
                       <Info size={16} className="text-zinc-500 mt-0.5" />
                       <p className="text-xs text-zinc-400 leading-relaxed">
-                        Posição calculada com Astronomy Engine (efemérides) para o seu local e horário do mapa.
-                        Atualização do céu a cada minuto.
+                        Posição e nascer/pôr calculados com Astronomy Engine para o local e a data/hora do mapa.
                       </p>
                     </div>
                   </div>
@@ -268,7 +420,7 @@ export default function App() {
       {/* Footer */}
       <footer className="relative z-10 mt-auto py-8 text-center border-t border-white/5">
         <p className="text-[10px] text-zinc-600 uppercase tracking-[0.2em]">
-          Estrelas: Yale BSC + extensão • Lua e planetas: Astronomy Engine
+          Estrelas J2000 → alt/az via Astronomy Engine • Efemérides: Astronomy Engine
         </p>
       </footer>
     </div>

@@ -41,15 +41,3 @@ for (const s of EXTRA_STARS) {
 
 /** Catálogo combinado para o mapa, ordenado por magnitude (mais brilhantes primeiro). */
 export const SKY_STARS: Star[] = [...byId.values()].sort((a, b) => a.mag - b.mag);
-
-export interface ConstellationLine {
-  from: string;
-  to: string;
-}
-
-export const CONSTELLATION_LINES: ConstellationLine[] = [
-  // Orion
-  { from: 'betelgeuse', to: 'bellatrix' },
-  { from: 'bellatrix', to: 'rigel' },
-  { from: 'rigel', to: 'sirius' }, // Just for visualization
-];
